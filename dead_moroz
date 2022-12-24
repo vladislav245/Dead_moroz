@@ -1,4 +1,3 @@
-// Алгоритм поиска оптимального потока для ориентированного графа c++
 #include <iostream>
 #include <ctime>
 #include <vector>
