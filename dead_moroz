@@ -1,0 +1,336 @@
+// Алгоритм поиска оптимального потока для ориентированного графа c++
+#include <iostream>
+#include <ctime>
+#include <vector>
+#include <string>
+#include <fstream>
+
+using namespace std;
+long long b_gift = 13263223; //кол-во мальчиков
+long long g_gift = 12556143; //кол-во девочек
+
+long long count_gift = 0; //количество созданных подарков
+long long MAX = 0;
+int result_weight; //нужен только для записи веса в файл
+vector<int> less_gift; //сюда в дальнейшем добавим кол-во игрушек с очень малым количеством
+ofstream file{ "koko_jambo.txt" };
+
+// находим количество подарков по данному шаблону и добавляем данные для глобальных значений
+void make_gift(vector<int>* path, vector<int>& c_size, vector<int> c_cost, string** c_name, int n, int max_sum, vector<int>index = {}, vector<int>index_count = {}) {
+
+    //здесь мы находим максимальное возможное кол-во подарков
+    long long min_size = 100000000;
+    //находим минимальное значение подарков которые можно составить
+    for (int i = 0; i < path->size(); i += 2) { 
+        if (c_size[path->at(i)] / path->at(i + 1) < min_size) {
+            min_size = c_size[path->at(i)] / path->at(i + 1);
+        }
+    }
+
+    //находим их минимальную сумму
+    for (int i = 0; i < path->size(); i += 2) {
+        c_size[path->at(i)] -= min_size * path->at(i + 1);
+    }
+
+    //если игрушек слишком мало сохраняем их для дальнейшего использования
+    for (auto i = path->begin(); i < path->end(); i += 2) {
+        if (c_size[*i] < *(i + 1) && c_size[*i] > 0) {
+            less_gift.push_back(*i);
+            less_gift.push_back(c_size[*i]);
+            c_size[*i] = 0;
+        }
+    }
+
+    MAX += min_size * max_sum;
+    count_gift += min_size;
+
+    static int gift_number = 0;
+    string name_toy;
+
+    //если количества игрушек много
+    if (index.empty()) {
+        for (auto i = path->begin(); i < path->end(); i += 2) {
+            int k = 0;
+            while (k < *(i + 1)) {
+                name_toy += *c_name[*i] + ", ";
+                k++;
+            }
+        }
+    }
+    else {
+        for (auto i = path->begin(); i < path->end(); i += 2) {
+            int k = 0;
+            while (k < *(i + 1)) {
+                string l = (*c_name[index[*i]] + ", ");
+                for (int f = index_count[*i]; f > 0; f--) name_toy.append(l);
+                k++;
+            }
+        }
+    }
+    name_toy.replace(name_toy.rfind(','), 2, " ");
+
+    while (gift_number < count_gift) {
+        file << gift_number + 1 << ", ";
+        file << max_sum << ", ";
+        file << result_weight << ", ";
+        file << name_toy;
+        gift_number++;
+        file << endl;
+    }
+
+    if (n == 1) b_gift -= min_size;
+    else g_gift -= min_size;
+}
+
+// ищем игрушки, которые набрали оптимальную сумму и их количество
+vector<int>* find_gift(int** arr, vector<int>& c_weight, int size) {
+
+    int max = arr[size][1001 - 1];
+    int weight = 1000;
+
+    vector<int>* path = new vector<int>;
+    int tmp_ind = size; 
+    while (tmp_ind > 0) {
+
+        if (weight == 0) break;
+
+        if (max == arr[tmp_ind - 1][weight]) {
+            tmp_ind--;
+            continue;
+        }
+
+        for (int i = weight; i > 0; i--) {
+            if (arr[tmp_ind][i] != arr[tmp_ind][i - 1]) {   // если нашли эту разницу    4 4_5 5 5
+
+                auto tmp = path->end();
+
+                // если не пуст и повторяется тот же элемент
+                if (!path->empty() && *(tmp - 2) == tmp_ind - 1) *(tmp - 1) += 1;
+
+                else {
+                    path->push_back(tmp_ind - 1); // здесь хранится индекс веса для c_weight
+                    path->push_back(1);         // здесь хранится их кол-во
+                }
+
+                weight -= c_weight[tmp_ind - 1];
+                max = arr[tmp_ind][i - c_weight[tmp_ind - 1]];
+                break;
+            }
+        }
+    }
+    result_weight = 1000 - weight;
+    return path;
+}
+
+void knapsack(int** arr, vector<int>& c_cost, vector<int>& c_weight, vector<int>& c_size, string** c_name, int size, long long& f_gift, int n) {
+
+    // если все подарки для мальчиков собраны или закончились игрушки для них
+    while (f_gift > 0 && count(c_size.begin(), c_size.end(), 0) != c_weight.size()) {
+
+        for (int i = 1; i < size + 1; i++) {
+
+            for (int j = 1; j < 1001; j++) {
+
+                arr[i][j] = max(arr[i - 1][j], arr[i][j - 1]);
+
+                if (j >= c_weight[i - 1]) {
+                    if (arr[i][j] < arr[i][j - c_weight[i - 1]] + c_cost[i - 1] && c_size[i - 1] > 0) {
+                        arr[i][j] = arr[i][j - c_weight[i - 1]] + c_cost[i - 1];
+                    }
+                }
+            }
+        }
+        //
+        make_gift(find_gift(arr, c_weight, size), c_size, c_cost, c_name, n, arr[size][1000]);
+    }
+}
+
+void remainder(vector<int>& c_cost, vector<int>& c_weight, string** c_name, int f_grift) {
+
+    vector<int> index;  //индекс на старые данные
+    vector<int> count_ind; //хранит кол-во сколько входит игрушек в индекс
+    vector<int> alternative_cost;
+    vector<int> alternative_weight;
+    int size = 0;
+
+    for (auto i = less_gift.begin(); i < less_gift.end(); i+=2) {
+
+        int k = 524288;
+        int count = *(i + 1);
+        while (k != 0) {
+            if (count - k >= 0) {
+                alternative_cost.push_back(c_cost[*(i)] * k);  
+                alternative_weight.push_back(c_weight[*(i)] * k);
+                index.push_back(*i); 
+                count_ind.push_back(k);
+                size++;
+                count -= k;
+            }
+            k /= 2;
+        }
+    }
+
+    vector<int> c_size;
+    c_size.resize(size);
+    fill(c_size.begin(), c_size.end(), 1);
+
+    int** arr = new int* [size + 1];
+    for (int i = 0; i < size + 1; i++) {
+        arr[i] = new int[1001];
+        arr[i][0] = 0;
+    }
+    for (int i = 0; i < 1001; i++) arr[0][i] = 0;
+
+    while (f_grift > 0 && count(c_size.begin(), c_size.end(), 0) != c_size.size()) {
+
+        for (int i = 1; i < size + 1; i++) {
+
+            for (int j = 1; j < 1001; j++) {
+
+                arr[i][j] = arr[i - 1][j];
+
+                if (j >= alternative_weight[i - 1]) {
+                    if (arr[i][j] < arr[i - 1][j - alternative_weight[i - 1]] + alternative_cost[i - 1] && c_size[i - 1] > 0) {
+                        arr[i][j] = arr[i - 1][j - alternative_weight[i - 1]] + alternative_cost[i - 1];
+                    }
+                }
+            }
+        }
+
+        //
+        make_gift(find_gift(arr, alternative_weight, size), c_size, alternative_cost, c_name, 1, arr[size][1000], index, count_ind);
+    }
+}
+
+int main() {
+
+    setlocale(LC_ALL, "rus");
+
+    // данные для мальчиков
+    vector<int> bc_cost;
+    vector<int> bc_weight;
+    vector<int> bc_size;
+    string** bc_name;
+    // данные для девочек
+    vector<int> gc_cost;
+    vector<int> gc_weight;
+    vector<int> gc_size;
+    string** gc_name;
+
+    const int boy_data[18]{
+        300, 500, 450, 100, 350, 700,
+        500, 400, 700, 200, 1200, 1000,
+        5843536, 3983569, 2434427, 8564275, 1768341, 945376
+    };
+    const int girl_data[18]{
+        450, 800, 250, 500, 200, 200,
+        300, 1500, 300, 650, 800, 400,
+        8159634, 1759267, 4264527, 2874123, 1689522, 3896345
+    };
+    const int common_data[18]{
+        50, 100, 50, 200, 200, 100,
+        50, 100, 50, 150, 200, 100,
+        4952347, 2589632, 3256876, 1958632, 8589632, 3154973
+    };
+    string boy_name[6]{ "Легковой автомобиль", "Грузовик", "Пожарная машина", "Самолет",
+        "Вертолет на радиоуправлении", "Конструктор ""Радиолюбитель""" };
+    string girl_name[6]{ "Кукла", "Игрушечный домик", "Мягкая игрушка",
+        "Набор ""Кухня""", "Детские украшения", "Детская косметика" };
+    string common_name[6]{ "Поп ит", "Пластилин", "Слайм",
+        "Набор ""Выращиваем кристаллы""", "Книга", "Фломастеры" };
+
+    int size = 12; // кол-во игрушей для мальчиков
+    bc_name = new string * [size];
+    for (int i = 0, j = 6, h = 12, q = 0; i != size / 2; i++, j++, h++, q+=2) {
+        bc_weight.push_back(boy_data[i]);
+        bc_cost.push_back(boy_data[j]);
+        bc_size.push_back(boy_data[h]);
+        bc_name[q] = &boy_name[i];
+        bc_weight.push_back(common_data[i]);
+        bc_cost.push_back(common_data[j]);
+        bc_size.push_back(common_data[h]);
+        bc_name[q+1] = &common_name[i];
+    }
+    //хранит данные количества общих игрушек, для дальнейшего заполнения оставшихся игрушек для девочек
+    int* copy_common[6]{ &bc_size[1], &bc_size[3], &bc_size[5], &bc_size[7], &bc_size[9], &bc_size[11] };
+
+    // сортировка по характеристике: цена\вес
+    for (int i = 0; i < size; i++) {
+        for (int j = i + 1; j < size; j++) {
+
+            if ((static_cast<double>(bc_cost[i]) / static_cast<double>(bc_weight[i])) < static_cast<double>(bc_cost[j]) / static_cast<double>(bc_weight[j])) {
+                int tmp = bc_cost[i];
+                bc_cost[i] = bc_cost[j];
+                bc_cost[j] = tmp;
+
+                tmp = bc_weight[i];
+                bc_weight[i] = bc_weight[j];
+                bc_weight[j] = tmp;
+
+                tmp = bc_size[i];
+                bc_size[i] = bc_size[j];
+                bc_size[j] = tmp;
+
+                string *name = bc_name[i];
+                bc_name[i] = bc_name[j];
+                bc_name[j] = name;
+            }
+        }
+    }
+
+    int** arr = new int* [size + 1];
+    for (int i = 0; i < size + 1; i++) {
+        arr[i] = new int[1001];
+        arr[i][0] = 0;
+    }
+    for (int i = 0; i < 1001; i++) arr[0][i] = 0;
+
+    knapsack(arr, bc_cost, bc_weight, bc_size, bc_name, size, b_gift, 1); //создаем большую часть подарков
+    remainder(bc_cost, bc_weight, bc_name, b_gift);  //создаем подарки из остатков
+    less_gift.clear();
+
+
+    int n = 0;
+    for (int i = 0, j = 6, h = 12; i != size / 2; i++, j++, h++) {
+        gc_weight.push_back(girl_data[i]);
+        gc_cost.push_back(girl_data[j]);
+        gc_size.push_back(girl_data[h]);
+        if (*copy_common[i] != 0) {
+            gc_weight.push_back(common_data[i]);
+            gc_cost.push_back(common_data[j]);
+            gc_size.push_back(common_data[h]);
+            n++;
+        }
+        n++;
+    }
+    size = n;
+    gc_name = new string * [size];
+    for (int i = 0; i != size; i++) {
+        gc_name[i] = &girl_name[i];
+    }
+
+
+    for (int i = 0; i != size + 1; i++) {
+        delete[] arr[i];
+    }
+    delete[] arr;
+
+    arr = new int* [size + 1];
+    for (int i = 0; i < size + 1; i++) {
+        arr[i] = new int[1001];
+        arr[i][0] = 0;
+    }
+    for (int i = 0; i < 1001; i++) arr[0][i] = 0;
+
+    knapsack(arr, gc_cost, gc_weight, gc_size, gc_name, size, g_gift, 0);
+    remainder(gc_cost, gc_weight, gc_name, g_gift);
+
+    for (int i = 0; i != size + 1; i++) {
+        delete[] arr[i];
+    }
+    delete[] arr;
+
+    file.close();
+
+    return 0;
+}
